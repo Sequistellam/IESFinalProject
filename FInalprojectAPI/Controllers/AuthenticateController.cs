@@ -11,6 +11,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace FInalprojectAPI.Controllers
 {
@@ -30,6 +31,18 @@ namespace FInalprojectAPI.Controllers
             _userManager = userManager;
             _roleManager = roleManager;
             _configuration = configuration;
+        }
+
+        public class AssignRoleModel
+        {
+            public string UserIdentifier { get; set; }
+            public string RoleName { get; set; }
+        }
+
+        public class UserWithRoleModel
+        {
+            public string Username { get; set; }
+            public IList<string> Roles { get; set; }
         }
 
         [HttpPost]
@@ -79,7 +92,6 @@ namespace FInalprojectAPI.Controllers
 
             if (!await _roleManager.RoleExistsAsync(UserRoles.User))
                 await _roleManager.CreateAsync(new IdentityRole(UserRoles.User));
-
             await _userManager.AddToRoleAsync(user, UserRoles.User);
 
             return Ok(new Response { Status = "Success", Message = "User created successfully!" });
@@ -105,7 +117,6 @@ namespace FInalprojectAPI.Controllers
 
             if (!await _roleManager.RoleExistsAsync(UserRoles.Admin))
                 await _roleManager.CreateAsync(new IdentityRole(UserRoles.Admin));
-
             await _userManager.AddToRoleAsync(user, UserRoles.Admin);
 
             return Ok(new Response { Status = "Success", Message = "Admin user created successfully!" });
@@ -113,20 +124,37 @@ namespace FInalprojectAPI.Controllers
 
         [HttpPost]
         [Route("assign-role")]
-        [Authorize(Roles = UserRoles.Admin)] // Only administrators can assign roles
+        [Authorize(Roles = UserRoles.Admin)]
         public async Task<IActionResult> AssignRole([FromBody] AssignRoleModel model)
         {
-            var user = await _userManager.FindByNameAsync(model.Username);
+            var user = await _userManager.FindByNameAsync(model.UserIdentifier);
             if (user == null)
                 return NotFound(new { Status = "Error", Message = "User not found!" });
 
-            var roleExists = await _roleManager.RoleExistsAsync(model.Role);
+            var roleExists = await _roleManager.RoleExistsAsync(model.RoleName);
             if (!roleExists)
-                await _roleManager.CreateAsync(new IdentityRole(model.Role));
+                await _roleManager.CreateAsync(new IdentityRole(model.RoleName));
 
-            await _userManager.AddToRoleAsync(user, model.Role);
+            await _userManager.AddToRoleAsync(user, model.RoleName);
 
-            return Ok(new { Status = "Success", Message = $"Role {model.Role} assigned to user {model.Username} successfully!" });
+            return Ok(new { Status = "Success", Message = $"Role {model.RoleName} assigned to user {model.UserIdentifier} successfully!" });
+        }
+
+        [HttpGet]
+        [Route("users")]
+        [Authorize(Roles = UserRoles.Admin)] // Only administrators can view users
+        public async Task<IActionResult> GetUsers()
+        {
+            var users = _userManager.Users.ToList(); // Materialize the user list here
+            var userWithRoles = new List<UserWithRoleModel>();
+
+            foreach (var user in users)
+            {
+                var roles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
+                userWithRoles.Add(new UserWithRoleModel { Username = user.UserName, Roles = roles });
+            }
+
+            return Ok(userWithRoles);
         }
 
         private JwtSecurityToken GetToken(List<Claim> authClaims)

@@ -9,6 +9,7 @@ using FInalprojectAPI.Data;
 using FInalprojectAPI.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace FInalprojectAPI.Controllers
 {
@@ -29,12 +30,22 @@ namespace FInalprojectAPI.Controllers
         [Authorize(Roles = UserRoles.User + "," + UserRoles.Manager + "," + UserRoles.Admin)]
         public async Task<ActionResult<IEnumerable<SwimmingResult>>> GetSwimmingResults()
         {
-            var results = await _context.SwimmingResults.ToListAsync();
+            IQueryable<SwimmingResult> resultsQuery = _context.SwimmingResults;
+
+            // If the user has the "User" role, filter the results to only include those from the year 2020
+            if (User.IsInRole(UserRoles.User))
+            {
+                resultsQuery = resultsQuery.Where(sr => sr.Year == "2020");
+            }
+            // If the user has the "Admin" or "Manager" role, no filtering is applied, and they can see the whole table
+
+            var results = await resultsQuery.ToListAsync();
+
             _logger.LogInformation($"Fetched {results.Count} swimming results.");
             return results;
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id}", Name = "GetSwimmingResult")]
         [Authorize(Roles = UserRoles.User + "," + UserRoles.Manager + "," + UserRoles.Admin)]
         public async Task<ActionResult<SwimmingResult>> GetSwimmingResult(int id)
         {
@@ -47,7 +58,7 @@ namespace FInalprojectAPI.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = UserRoles.Admin)]
+        [Authorize(Roles = UserRoles.Admin + "," + UserRoles.Manager)]
         public async Task<IActionResult> PutSwimmingResult(int id, SwimmingResult swimmingResult)
         {
             if (id != swimmingResult.Id)
@@ -55,6 +66,7 @@ namespace FInalprojectAPI.Controllers
                 return BadRequest();
             }
 
+            swimmingResult.AddedBy = User.Identity.Name;
             _context.Entry(swimmingResult).State = EntityState.Modified;
 
             try
@@ -77,9 +89,10 @@ namespace FInalprojectAPI.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = UserRoles.Manager + "," + UserRoles.Admin)]
+        [Authorize(Roles = UserRoles.User + "," + UserRoles.Manager + "," + UserRoles.Admin)]
         public async Task<ActionResult<SwimmingResult>> PostSwimmingResult(SwimmingResult swimmingResult)
         {
+            swimmingResult.AddedBy = User.Identity.Name;
             _context.SwimmingResults.Add(swimmingResult);
             await _context.SaveChangesAsync();
 
@@ -95,7 +108,6 @@ namespace FInalprojectAPI.Controllers
             {
                 return NotFound();
             }
-
             _context.SwimmingResults.Remove(swimmingResult);
             await _context.SaveChangesAsync();
 

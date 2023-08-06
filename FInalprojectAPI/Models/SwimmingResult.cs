@@ -19,5 +19,6 @@ namespace FInalprojectAPI.Models
         public string? Team { get; set; }
         public string? Athlete { get; set; }
         public string? Results { get; set; }
+        public string? AddedBy { get; set; } // field to track who added this result
     }
 }
